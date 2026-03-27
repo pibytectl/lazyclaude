@@ -168,8 +168,16 @@ class LazyClaude(App):
             )
 
         elif isinstance(panel, SessionPanel):
-            from lazyclaude.models import HistoryEntry
-            if isinstance(data, HistoryEntry):
+            from lazyclaude.models import HistoryEntry, TranscriptSession
+            if isinstance(data, TranscriptSession):
+                detail.show_text(
+                    f"Session — {data.session_id[:12]}…",
+                    f"[cyan]Session ID:[/cyan] {data.session_id}\n"
+                    f"[cyan]Modified:[/cyan]   {data.modified.strftime('%Y-%m-%d %H:%M')}\n"
+                    f"[cyan]Size:[/cyan]       {data.size_kb} KB\n"
+                    f"[cyan]Path:[/cyan]       {data.path}",
+                )
+            elif isinstance(data, HistoryEntry):
                 detail.show_text(
                     f"History — {data.project.split('/')[-1]}",
                     f"[cyan]Command:[/cyan] {data.display}\n\n[dim]Project: {data.project}[/dim]",
@@ -193,7 +201,8 @@ class LazyClaude(App):
             self._selected_project = data
             data.memory_files = self._claude_dir.load_memory_files(data)
             self.query_one("#panel-memory", MemoryPanel).load_files(data.memory_files)
-            self.query_one("#panel-sessions", SessionPanel).filter_project(data.display_name)
+            transcripts = self._claude_dir.list_transcripts(data)
+            self.query_one("#panel-sessions", SessionPanel).load_transcripts(transcripts)
             self.sub_title = data.display_name
             self.notify(f"Loaded {data.short_name}", timeout=2)
 

@@ -15,6 +15,7 @@ from lazyclaude.models import (
     Project,
     SessionMeta,
     Skill,
+    TranscriptSession,
 )
 
 IGNORED_MEMORY_FILES = {".consolidate-lock", ".highwatermark", "MEMORY.md"}
@@ -226,6 +227,29 @@ class ClaudeDir:
         global_claude = self.base / "CLAUDE.md"
         self._backup(global_claude)
         global_claude.write_text(content, encoding="utf-8")
+
+    # ── Transcripts ────────────────────────────────────────────────────────────
+
+    def list_transcripts(self, project: Project) -> list[TranscriptSession]:
+        """List session transcript .jsonl files in a project directory."""
+        if not project.path.exists():
+            return []
+        transcripts: list[TranscriptSession] = []
+        for f in project.path.iterdir():
+            if not f.suffix == ".jsonl" or not f.is_file():
+                continue
+            try:
+                stat = f.stat()
+                transcripts.append(TranscriptSession(
+                    path=f,
+                    session_id=f.stem,
+                    modified=datetime.fromtimestamp(stat.st_mtime),
+                    size_kb=int(stat.st_size / 1024),
+                ))
+            except OSError:
+                continue
+        transcripts.sort(key=lambda t: t.modified, reverse=True)
+        return transcripts
 
     # ── Skills ────────────────────────────────────────────────────────────────
 

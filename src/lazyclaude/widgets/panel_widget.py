@@ -11,7 +11,7 @@ from textual.widgets import ListView, ListItem, Static
 from textual.app import ComposeResult
 
 from lazyclaude.claude_dir import IGNORED_MEMORY_FILES
-from lazyclaude.models import Agent, MemoryFile, MemoryType, Project, Skill
+from lazyclaude.models import Agent, HistoryEntry, MemoryFile, MemoryType, Project, Skill, TranscriptSession
 
 
 # ── Utility ──────────────────────────────────────────────────────────────────
@@ -377,7 +377,7 @@ class AgentPanel(PanelWidget):
 class SessionPanel(PanelWidget):
     panel_index = 6
     panel_label = "Sessions"
-    subtabs = ["Project", "All"]
+    subtabs = ["Sessions", "History"]
 
     BINDINGS = [
         Binding("enter", "select_cursor", "View", show=True),
@@ -386,57 +386,40 @@ class SessionPanel(PanelWidget):
 
     def __init__(self, **kwargs) -> None:
         super().__init__(**kwargs)
-        self._all_history: list[object] = []
-        self._sessions: list[object] = []
-        self._project_filter: str | None = None
+        self._all_history: list[HistoryEntry] = []
+        self._transcripts: list[TranscriptSession] = []
 
-    def load_data(self, history: list, sessions: list) -> None:
+    def load_data(self, history: list[HistoryEntry], sessions: list) -> None:
         self._all_history = history
-        self._sessions = sessions
         self._render_items()
 
-    def filter_project(self, project_path: str | None) -> None:
-        """Filter sessions to a specific project. None = show all."""
-        self._project_filter = project_path
-        self._update_title()
+    def load_transcripts(self, transcripts: list[TranscriptSession]) -> None:
+        """Load transcript files for the selected project."""
+        self._transcripts = transcripts
         self._render_items()
-
-    @property
-    def _filtered_history(self) -> list:
-        if self._active_subtab == 0 and self._project_filter:
-            return [e for e in self._all_history if e.project.rstrip("/") == self._project_filter.rstrip("/")]
-        return self._all_history
 
     def _render_items(self) -> None:
         lv = self.listview
         lv.clear()
 
-        history = self._filtered_history
-
-        if self._active_subtab == 0:  # Project (filtered)
-            if not history:
-                proj_name = self._project_filter.rstrip("/").split("/")[-1] if self._project_filter else "none"
-                lv.append(self._make_item(f"[dim]No sessions for {proj_name}[/dim]", None))
+        if self._active_subtab == 0:  # Sessions (transcript files)
+            if not self._transcripts:
+                lv.append(self._make_item("[dim]No sessions — select a project[/dim]", None))
                 return
-            seen: set[str] = set()
-            for entry in reversed(history):
-                display = entry.display.strip()[:40]
-                if display in seen:
-                    continue
-                seen.add(display)
-                ts = _fmt_ts(entry.timestamp)
-                label = f"[dim]{ts}[/dim] {display}"
-                lv.append(self._make_item(label, entry))
-                if len(seen) >= 50:
-                    break
+            for t in self._transcripts:
+                date = _fmt_date(t.modified)
+                size = f"{t.size_kb}KB" if t.size_kb < 1024 else f"{t.size_kb // 1024}MB"
+                sid = t.session_id[:8]
+                label = f"[dim]{date}[/dim] {sid}… [dim]{size}[/dim]"
+                lv.append(self._make_item(label, t))
 
-        else:  # All
-            if not history:
+        else:  # History (all prompts from history.jsonl)
+            if not self._all_history:
                 lv.append(self._make_item("[dim]No history[/dim]", None))
                 return
             seen: set[str] = set()
-            for entry in reversed(history):
-                display = entry.display.strip()[:40]
+            for entry in reversed(self._all_history):
+                display = entry.display.strip()[:35]
                 if display in seen:
                     continue
                 seen.add(display)

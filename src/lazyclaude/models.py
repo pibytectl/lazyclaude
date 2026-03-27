@@ -114,6 +114,15 @@ class HistoryEntry:
 
 
 @dataclass
+class TranscriptSession:
+    """A session transcript (.jsonl file) in a project directory."""
+    path: Path
+    session_id: str
+    modified: datetime
+    size_kb: int
+
+
+@dataclass
 class SessionMeta:
     pid: int
     session_id: str
