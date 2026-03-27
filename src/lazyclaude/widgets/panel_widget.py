@@ -10,6 +10,7 @@ from textual.widget import Widget
 from textual.widgets import ListView, ListItem, Static
 from textual.app import ComposeResult
 
+from lazyclaude.claude_dir import IGNORED_MEMORY_FILES
 from lazyclaude.models import Agent, MemoryFile, MemoryType, Project, Skill
 
 
@@ -188,7 +189,16 @@ class ProjectPanel(PanelWidget):
             if len(name) > 20:
                 name = name[:19] + "…"
             date = _fmt_date(project.last_active)
-            label = f"{name} [dim]{date} {project.transcript_count}s[/dim]"
+            # Count memory files from disk (cheap — just counts .md files)
+            mem_count = 0
+            mem_dir = project.memory_path
+            if mem_dir.exists():
+                mem_count = sum(1 for f in mem_dir.iterdir()
+                                if f.suffix == ".md" and f.name not in IGNORED_MEMORY_FILES)
+            info = f"{date}"
+            if mem_count:
+                info += f" {mem_count}m"
+            label = f"{name} [dim]{info}[/dim]"
             lv.append(self._make_item(label, project))
 
     def refresh_projects(self, projects: list[Project]) -> None:
