@@ -1,0 +1,20 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "lazyclaude"
+version = "0.2.0"
+description = "LazyGit-inspired TUI for managing the .claude directory ecosystem"
+requires-python = ">=3.12"
+license = "MIT"
+dependencies = [
+    "textual>=6.0.0",
+    "pyyaml>=6.0",
+]
+
+[project.scripts]
+lazyclaude = "lazyclaude.app:main"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/lazyclaude"]
