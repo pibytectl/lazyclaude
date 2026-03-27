@@ -315,9 +315,16 @@ class MemoryPanel(PanelWidget):
         if not self._memory_files:
             lv.append(self._make_item("[dim]No memory files[/dim]", None))
             return
+        type_labels = {
+            MemoryType.USER: "USR",
+            MemoryType.PROJECT: "PRJ",
+            MemoryType.FEEDBACK: "FDB",
+            MemoryType.REFERENCE: "REF",
+            MemoryType.UNKNOWN: "UNK",
+        }
         for mem in self._memory_files:
             color = TYPE_COLORS.get(mem.memory_type, "white")
-            tag = mem.memory_type.value[:3].upper()
+            tag = type_labels.get(mem.memory_type, "UNK")
             name = mem.name
             if len(name) > 18:
                 name = name[:17] + "…"
