@@ -45,7 +45,7 @@ FooterKey .footer-key--description {
 }
 
 #left-panels {
-    width: 34;
+    width: 42;
     height: 1fr;
 }
 

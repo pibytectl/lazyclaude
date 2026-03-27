@@ -186,8 +186,8 @@ class ProjectPanel(PanelWidget):
             name = project.short_name
             if project.display_name in ("/home/andy", "/home/andy/"):
                 name = "~ (Global)"
-            if len(name) > 20:
-                name = name[:19] + "…"
+            if len(name) > 26:
+                name = name[:25] + "…"
             date = _fmt_date(project.last_active)
             # Count memory files from disk (cheap — just counts .md files)
             mem_count = 0
