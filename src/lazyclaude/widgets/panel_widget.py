@@ -230,7 +230,6 @@ class ProjectPanel(PanelWidget):
 class ConfigPanel(PanelWidget):
     panel_index = 2
     panel_label = "Config"
-    subtabs = ["CLAUDE.md", "settings"]
 
     BINDINGS = [
         Binding("e", "edit_config", "Edit", show=True),
@@ -240,12 +239,41 @@ class ConfigPanel(PanelWidget):
 
     def __init__(self, **kwargs) -> None:
         super().__init__(**kwargs)
-        self._config_items: list[tuple[str, str]] = [
-            ("CLAUDE.md (project)", "claude_md"),
-            ("CLAUDE.md (global)", "claude_md_global"),
-            ("settings.json", "settings_json"),
-            ("settings.local.json", "settings_local"),
-        ]
+        self._project: Project | None = None
+        self._config_items: list[tuple[str, str]] = []
+        self._rebuild_items()
+
+    def _rebuild_items(self) -> None:
+        """Rebuild config item list based on current project."""
+        from pathlib import Path
+
+        items: list[tuple[str, str]] = []
+
+        # Project CLAUDE.md
+        if self._project:
+            proj_path = Path(self._project.display_name) / "CLAUDE.md"
+            exists = proj_path.exists()
+            name = self._project.short_name
+            if exists:
+                items.append((f"[cyan]CLAUDE.md[/cyan] [dim]({name})[/dim]", "claude_md"))
+            else:
+                items.append((f"[dim]CLAUDE.md ({name}) — none[/dim]", "claude_md"))
+        else:
+            items.append(("[dim]CLAUDE.md — select a project[/dim]", "claude_md"))
+
+        # Global CLAUDE.md
+        items.append(("[cyan]CLAUDE.md[/cyan] [dim](global)[/dim]", "claude_md_global"))
+
+        # Settings
+        items.append(("settings.json", "settings_json"))
+        items.append(("settings.local.json", "settings_local"))
+
+        self._config_items = items
+
+    def load_project(self, project: Project) -> None:
+        self._project = project
+        self._rebuild_items()
+        self._render_items()
 
     def _render_items(self) -> None:
         lv = self.listview
@@ -254,7 +282,6 @@ class ConfigPanel(PanelWidget):
             lv.append(self._make_item(display, key))
 
     def action_edit_config(self) -> None:
-        # Delegates to the app via message
         idx = self.listview.index
         if idx is not None and idx < len(self._config_items):
             self._post_select(("edit", self._config_items[idx][1]))

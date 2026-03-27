@@ -209,6 +209,7 @@ class LazyClaude(App):
                 self._selected_project = data
                 data.memory_files = self._claude_dir.load_memory_files(data)
                 self.query_one("#panel-memory", MemoryPanel).load_files(data.memory_files)
+                self.query_one("#panel-config", ConfigPanel).load_project(data)
                 transcripts = self._claude_dir.list_transcripts(data)
                 self.query_one("#panel-sessions", SessionPanel).load_transcripts(transcripts)
                 self.sub_title = data.display_name
