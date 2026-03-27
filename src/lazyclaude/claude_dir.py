@@ -205,12 +205,14 @@ class ClaudeDir:
     # ── CLAUDE.md ─────────────────────────────────────────────────────────────
 
     def load_claude_md(self, project: Project | None = None) -> str:
+        """Load CLAUDE.md for a project. Does NOT fall back to global."""
         if project is not None:
-            # Check for project-level CLAUDE.md (in the actual project dir, not .claude/projects/)
             decoded = project.display_name
             project_claude = Path(decoded) / "CLAUDE.md"
             if project_claude.exists():
                 return project_claude.read_text(encoding="utf-8")
+            return ""
+        # No project specified — load global
         global_claude = self.base / "CLAUDE.md"
         if global_claude.exists():
             return global_claude.read_text(encoding="utf-8")

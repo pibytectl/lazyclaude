@@ -241,7 +241,8 @@ class ConfigPanel(PanelWidget):
     def __init__(self, **kwargs) -> None:
         super().__init__(**kwargs)
         self._config_items: list[tuple[str, str]] = [
-            ("CLAUDE.md", "claude_md"),
+            ("CLAUDE.md (project)", "claude_md"),
+            ("CLAUDE.md (global)", "claude_md_global"),
             ("settings.json", "settings_json"),
             ("settings.local.json", "settings_local"),
         ]

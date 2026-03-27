@@ -292,7 +292,14 @@ class LazyClaude(App):
     def _show_config_detail(self, key: str, detail: DetailPane) -> None:
         if key == "claude_md":
             content = self._claude_dir.load_claude_md(self._selected_project)
-            detail.show_markdown("CLAUDE.md", content or "*No CLAUDE.md*")
+            proj_name = self._selected_project.short_name if self._selected_project else "none"
+            detail.show_markdown(
+                f"CLAUDE.md — {proj_name}",
+                content or f"*No CLAUDE.md for {proj_name}*",
+            )
+        elif key == "claude_md_global":
+            content = self._claude_dir.load_claude_md(None)
+            detail.show_markdown("CLAUDE.md — Global", content or "*No global CLAUDE.md*")
         elif key == "settings_json":
             settings = self._claude_dir.load_settings()
             detail.show_tree("settings.json", settings.raw)
