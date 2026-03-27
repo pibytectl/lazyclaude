@@ -253,7 +253,7 @@ class ClaudeDir:
                     name=fm.get("name", entry.name),
                     description=fm.get("description", ""),
                     auto_triggers=triggers,
-                    content=body,
+                    content="",  # lazy-loaded on demand
                 ))
             except (OSError, Exception):
                 continue
@@ -281,7 +281,7 @@ class ClaudeDir:
                     description=desc,
                     model=fm.get("model", "sonnet"),
                     color=fm.get("color", "white"),
-                    content=body,
+                    content="",  # lazy-loaded on demand
                 ))
             except (OSError, Exception):
                 continue

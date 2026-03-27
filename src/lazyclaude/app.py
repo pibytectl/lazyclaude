@@ -5,6 +5,7 @@ from __future__ import annotations
 from textual.app import App, ComposeResult
 from textual.binding import Binding
 from textual.containers import Horizontal, Vertical
+from textual.timer import Timer
 from textual.widgets import Footer, Header
 
 from lazyclaude.claude_dir import ClaudeDir
@@ -22,6 +23,9 @@ from lazyclaude.widgets.panel_widget import (
     SessionPanel,
     SkillPanel,
 )
+
+# Debounce delay for detail pane updates (seconds)
+DETAIL_DEBOUNCE = 0.12
 
 
 class LazyClaude(App):
@@ -49,6 +53,9 @@ class LazyClaude(App):
         self._claude_dir = ClaudeDir()
         self._active_panel: PanelWidget | None = None
         self._selected_project: Project | None = None
+        self._detail_timer: Timer | None = None
+        self._pending_highlight: tuple[PanelWidget, object] | None = None
+        self._claude_md_cache: dict[str, str] = {}  # project path → content
 
     def compose(self) -> ComposeResult:
         yield Header(show_clock=True)
@@ -111,13 +118,22 @@ class LazyClaude(App):
     # ── Panel Item Events ─────────────────────────────────────────────────
 
     def on_panel_widget_item_highlighted(self, event: PanelWidget.ItemHighlighted) -> None:
-        """Update detail pane when highlighted item changes."""
-        panel = event.panel
-        data = event.data
+        """Debounce detail pane updates — avoids heavy Markdown re-render on every j/k."""
+        self._pending_highlight = (event.panel, event.data)
+        if self._detail_timer is not None:
+            self._detail_timer.stop()
+        self._detail_timer = self.set_timer(DETAIL_DEBOUNCE, self._flush_highlight)
+
+    def _flush_highlight(self) -> None:
+        """Actually update the detail pane after debounce delay."""
+        if self._pending_highlight is None:
+            return
+        panel, data = self._pending_highlight
+        self._pending_highlight = None
         detail = self.query_one("#detail-pane", DetailPane)
 
         if isinstance(panel, ProjectPanel) and isinstance(data, Project):
-            claude_md = self._claude_dir.load_claude_md(data)
+            claude_md = self._get_claude_md(data)
             detail.show_markdown(
                 f"CLAUDE.md — {data.short_name}",
                 claude_md or f"*No CLAUDE.md for {data.display_name}*",
@@ -133,6 +149,9 @@ class LazyClaude(App):
             )
 
         elif isinstance(panel, SkillPanel) and isinstance(data, Skill):
+            # Lazy-load content if not yet loaded
+            if not data.content:
+                data.content = data.path.read_text(encoding="utf-8").split("---", 2)[-1].lstrip("\n") if data.path.exists() else ""
             triggers = ", ".join(f"`{t}`" for t in data.auto_triggers) if data.auto_triggers else "*none*"
             detail.show_markdown(
                 f"Skill — {data.name}",
@@ -140,6 +159,9 @@ class LazyClaude(App):
             )
 
         elif isinstance(panel, AgentPanel) and isinstance(data, Agent):
+            # Lazy-load content if not yet loaded
+            if not data.content:
+                data.content = data.path.read_text(encoding="utf-8").split("---", 2)[-1].lstrip("\n") if data.path.exists() else ""
             detail.show_markdown(
                 f"Agent — {data.name}",
                 f"**Model:** `{data.model}` | **Color:** {data.color}\n\n---\n\n{data.content}",
@@ -152,6 +174,13 @@ class LazyClaude(App):
                     f"History — {data.project.split('/')[-1]}",
                     f"[cyan]Command:[/cyan] {data.display}\n\n[dim]Project: {data.project}[/dim]",
                 )
+
+    def _get_claude_md(self, project: Project) -> str:
+        """Cached CLAUDE.md loading."""
+        key = str(project.path)
+        if key not in self._claude_md_cache:
+            self._claude_md_cache[key] = self._claude_dir.load_claude_md(project)
+        return self._claude_md_cache[key]
 
     def on_panel_widget_item_selected(self, event: PanelWidget.ItemSelected) -> None:
         """Handle Enter key or action in panels."""
@@ -296,6 +325,7 @@ class LazyClaude(App):
         self.push_screen(HelpOverlay())
 
     def action_reload(self) -> None:
+        self._claude_md_cache.clear()
         projects = self._claude_dir.list_projects()
         self.query_one("#panel-projects", ProjectPanel).refresh_projects(projects)
 
