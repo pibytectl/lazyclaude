@@ -23,13 +23,13 @@ def _fmt_date(dt: datetime | None) -> str:
     now = datetime.now()
     delta = now - dt
     if delta.days == 0:
-        return "today"
+        return "0d"
     if delta.days == 1:
-        return "yesterday"
+        return "1d"
     if delta.days < 7:
-        return f"{delta.days}d ago"
+        return f"{delta.days}d"
     if delta.days < 30:
-        return f"{delta.days // 7}w ago"
+        return f"{delta.days // 7}w"
     return dt.strftime("%b %d")
 
 
@@ -195,11 +195,9 @@ class ProjectPanel(PanelWidget):
             if mem_dir.exists():
                 mem_count = sum(1 for f in mem_dir.iterdir()
                                 if f.suffix == ".md" and f.name not in IGNORED_MEMORY_FILES)
-            # Session count from history.jsonl (injected by app.on_mount)
-            session_count = getattr(project, "_session_count", 0)
             badges = []
-            if session_count:
-                badges.append(f"{session_count}s")
+            if project.transcript_count:
+                badges.append(f"{project.transcript_count}s")
             if mem_count:
                 badges.append(f"{mem_count}m")
             suffix = " ".join(badges)
