@@ -172,12 +172,25 @@ class ProjectPanel(PanelWidget):
 
     BINDINGS = [
         Binding("enter", "select_cursor", "Select", show=True),
+        Binding("d", "delete_project", "Delete", show=True),
         *PanelWidget.BINDINGS,
     ]
 
     def __init__(self, projects: list[Project], **kwargs) -> None:
         super().__init__(**kwargs)
         self._projects = projects
+
+    def action_delete_project(self) -> None:
+        idx = self.listview.index
+        if idx is not None and idx < len(self._projects):
+            self._post_select(("action", "delete_project"))
+
+    @property
+    def selected_project(self) -> Project | None:
+        idx = self.listview.index
+        if idx is not None and idx < len(self._projects):
+            return self._projects[idx]
+        return None
 
     def _render_items(self) -> None:
         lv = self.listview

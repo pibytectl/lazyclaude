@@ -196,15 +196,18 @@ class LazyClaude(App):
         data = event.data
         detail = self.query_one("#detail-pane", DetailPane)
 
-        # ── Project selection ──
-        if isinstance(panel, ProjectPanel) and isinstance(data, Project):
-            self._selected_project = data
-            data.memory_files = self._claude_dir.load_memory_files(data)
-            self.query_one("#panel-memory", MemoryPanel).load_files(data.memory_files)
-            transcripts = self._claude_dir.list_transcripts(data)
-            self.query_one("#panel-sessions", SessionPanel).load_transcripts(transcripts)
-            self.sub_title = data.display_name
-            self.notify(f"Loaded {data.short_name}", timeout=2)
+        # ── Project selection / actions ──
+        if isinstance(panel, ProjectPanel):
+            if isinstance(data, tuple) and data[0] == "action":
+                self._handle_project_action(data[1])
+            elif isinstance(data, Project):
+                self._selected_project = data
+                data.memory_files = self._claude_dir.load_memory_files(data)
+                self.query_one("#panel-memory", MemoryPanel).load_files(data.memory_files)
+                transcripts = self._claude_dir.list_transcripts(data)
+                self.query_one("#panel-sessions", SessionPanel).load_transcripts(transcripts)
+                self.sub_title = data.display_name
+                self.notify(f"Loaded {data.short_name}", timeout=2)
 
         # ── Config actions ──
         elif isinstance(panel, ConfigPanel):
@@ -224,6 +227,53 @@ class LazyClaude(App):
         elif isinstance(panel, SessionPanel):
             if isinstance(data, tuple) and data[0] == "action":
                 self._handle_session_action(data[1])
+
+    # ── Project Helpers ────────────────────────────────────────────────────
+
+    def _handle_project_action(self, action: str) -> None:
+        if action == "delete_project":
+            proj_panel = self.query_one("#panel-projects", ProjectPanel)
+            project = proj_panel.selected_project
+            if project is None:
+                return
+
+            # Tally what will be deleted
+            mem_count = 0
+            mem_dir = project.memory_path
+            if mem_dir.exists():
+                from lazyclaude.claude_dir import IGNORED_MEMORY_FILES
+                mem_count = sum(1 for f in mem_dir.iterdir()
+                                if f.suffix == ".md" and f.name not in IGNORED_MEMORY_FILES)
+            transcripts = self._claude_dir.list_transcripts(project)
+            total_kb = sum(t.size_kb for t in transcripts)
+            size = f"{total_kb}KB" if total_kb < 1024 else f"{total_kb // 1024}MB"
+
+            msg = (
+                f"Delete project '{project.short_name}'?\n"
+                f"  {len(transcripts)} sessions ({size}), {mem_count} memory files\n"
+                f"  Code at {project.display_name} is NOT deleted"
+            )
+
+            def on_confirm(confirmed: bool) -> None:
+                if not confirmed:
+                    return
+                import shutil
+                shutil.rmtree(project.path, ignore_errors=True)
+                # Clear selection if this was the active project
+                if self._selected_project is project:
+                    self._selected_project = None
+                    self.query_one("#panel-memory", MemoryPanel).load_files([])
+                    self.query_one("#panel-sessions", SessionPanel).load_transcripts([])
+                    self.sub_title = "v0.2.0"
+                # Refresh project list
+                self._claude_md_cache.pop(str(project.path), None)
+                projects = self._claude_dir.list_projects()
+                proj_panel.refresh_projects(projects)
+                detail = self.query_one("#detail-pane", DetailPane)
+                detail.show_text("Projects", f"[dim]Deleted {project.short_name}[/dim]")
+                self.notify(f"Deleted {project.short_name}", severity="information", timeout=2)
+
+            self.push_screen(ConfirmModal(msg), on_confirm)
 
     # ── Config Helpers ────────────────────────────────────────────────────
 
