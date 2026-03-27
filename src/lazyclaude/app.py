@@ -133,10 +133,15 @@ class LazyClaude(App):
         detail = self.query_one("#detail-pane", DetailPane)
 
         if isinstance(panel, ProjectPanel) and isinstance(data, Project):
-            claude_md = self._get_claude_md(data)
-            detail.show_markdown(
-                f"CLAUDE.md — {data.short_name}",
-                claude_md or f"*No CLAUDE.md for {data.display_name}*",
+            # Lightweight summary on highlight — CLAUDE.md loads on Enter
+            mem_count = len(data.memory_files) if data.memory_files else 0
+            detail.show_text(
+                data.short_name,
+                f"[cyan]Path:[/cyan]     {data.display_name}\n"
+                f"[cyan]Sessions:[/cyan] {data.transcript_count}\n"
+                f"[cyan]Memory:[/cyan]   {mem_count} files\n"
+                f"[cyan]Active:[/cyan]   {data.last_active.strftime('%Y-%m-%d %H:%M') if data.last_active else 'never'}\n"
+                f"\n[dim]Press Enter to load project[/dim]",
             )
 
         elif isinstance(panel, ConfigPanel) and isinstance(data, str):
@@ -207,6 +212,13 @@ class LazyClaude(App):
                 transcripts = self._claude_dir.list_transcripts(data)
                 self.query_one("#panel-sessions", SessionPanel).load_transcripts(transcripts)
                 self.sub_title = data.display_name
+                # Show CLAUDE.md on Enter
+                detail = self.query_one("#detail-pane", DetailPane)
+                claude_md = self._get_claude_md(data)
+                detail.show_markdown(
+                    f"CLAUDE.md — {data.short_name}",
+                    claude_md or f"*No CLAUDE.md for {data.display_name}*",
+                )
                 self.notify(f"Loaded {data.short_name}", timeout=2)
 
         # ── Config actions ──
