@@ -193,6 +193,7 @@ class LazyClaude(App):
             self._selected_project = data
             data.memory_files = self._claude_dir.load_memory_files(data)
             self.query_one("#panel-memory", MemoryPanel).load_files(data.memory_files)
+            self.query_one("#panel-sessions", SessionPanel).filter_project(data.display_name)
             self.sub_title = data.display_name
             self.notify(f"Loaded {data.short_name}", timeout=2)
 

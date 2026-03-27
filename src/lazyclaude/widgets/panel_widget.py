@@ -188,7 +188,7 @@ class ProjectPanel(PanelWidget):
             if len(name) > 20:
                 name = name[:19] + "…"
             date = _fmt_date(project.last_active)
-            label = f"{name} [dim]{date} {project.transcript_count}t[/dim]"
+            label = f"{name} [dim]{date} {project.transcript_count}s[/dim]"
             lv.append(self._make_item(label, project))
 
     def refresh_projects(self, projects: list[Project]) -> None:
@@ -309,7 +309,7 @@ class SkillPanel(PanelWidget):
             lv.append(self._make_item("[dim]No skills[/dim]", None))
             return
         for skill in skills:
-            triggers = f" [dim]{len(skill.auto_triggers)}t[/dim]" if skill.auto_triggers else ""
+            triggers = f" [dim]{len(skill.auto_triggers)} triggers[/dim]" if skill.auto_triggers else ""
             lv.append(self._make_item(f"{skill.name}{triggers}", skill))
 
 
@@ -362,7 +362,7 @@ class AgentPanel(PanelWidget):
 class SessionPanel(PanelWidget):
     panel_index = 6
     panel_label = "Sessions"
-    subtabs = ["Recent", "By Project"]
+    subtabs = ["Project", "All"]
 
     BINDINGS = [
         Binding("enter", "select_cursor", "View", show=True),
@@ -371,24 +371,56 @@ class SessionPanel(PanelWidget):
 
     def __init__(self, **kwargs) -> None:
         super().__init__(**kwargs)
-        self._history: list[object] = []
+        self._all_history: list[object] = []
         self._sessions: list[object] = []
+        self._project_filter: str | None = None
 
     def load_data(self, history: list, sessions: list) -> None:
-        self._history = history
+        self._all_history = history
         self._sessions = sessions
         self._render_items()
+
+    def filter_project(self, project_path: str | None) -> None:
+        """Filter sessions to a specific project. None = show all."""
+        self._project_filter = project_path
+        self._update_title()
+        self._render_items()
+
+    @property
+    def _filtered_history(self) -> list:
+        if self._active_subtab == 0 and self._project_filter:
+            return [e for e in self._all_history if e.project.rstrip("/") == self._project_filter.rstrip("/")]
+        return self._all_history
 
     def _render_items(self) -> None:
         lv = self.listview
         lv.clear()
 
-        if self._active_subtab == 0:  # Recent history
-            if not self._history:
+        history = self._filtered_history
+
+        if self._active_subtab == 0:  # Project (filtered)
+            if not history:
+                proj_name = self._project_filter.rstrip("/").split("/")[-1] if self._project_filter else "none"
+                lv.append(self._make_item(f"[dim]No sessions for {proj_name}[/dim]", None))
+                return
+            seen: set[str] = set()
+            for entry in reversed(history):
+                display = entry.display.strip()[:40]
+                if display in seen:
+                    continue
+                seen.add(display)
+                ts = _fmt_ts(entry.timestamp)
+                label = f"[dim]{ts}[/dim] {display}"
+                lv.append(self._make_item(label, entry))
+                if len(seen) >= 50:
+                    break
+
+        else:  # All
+            if not history:
                 lv.append(self._make_item("[dim]No history[/dim]", None))
                 return
             seen: set[str] = set()
-            for entry in reversed(self._history):
+            for entry in reversed(history):
                 display = entry.display.strip()[:40]
                 if display in seen:
                     continue
@@ -399,18 +431,3 @@ class SessionPanel(PanelWidget):
                 lv.append(self._make_item(label, entry))
                 if len(seen) >= 50:
                     break
-
-        else:  # By Project
-            from lazyclaude.history import group_history_by_project
-            grouped = group_history_by_project(self._history)
-            if not grouped:
-                lv.append(self._make_item("[dim]No history[/dim]", None))
-                return
-            for proj, entries in sorted(grouped.items(), key=lambda x: -len(x[1])):
-                lv.append(self._make_item(
-                    f"[cyan]{proj}[/cyan] [dim]({len(entries)} entries)[/dim]",
-                    None,
-                ))
-                for entry in entries[-5:]:  # Show last 5 per project
-                    display = entry.display.strip()[:35]
-                    lv.append(self._make_item(f"  {display}", entry))
