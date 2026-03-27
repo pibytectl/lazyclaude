@@ -195,10 +195,17 @@ class ProjectPanel(PanelWidget):
             if mem_dir.exists():
                 mem_count = sum(1 for f in mem_dir.iterdir()
                                 if f.suffix == ".md" and f.name not in IGNORED_MEMORY_FILES)
-            info = f"{date}"
+            # Session count from history.jsonl (injected by app.on_mount)
+            session_count = getattr(project, "_session_count", 0)
+            badges = []
+            if session_count:
+                badges.append(f"{session_count}s")
             if mem_count:
-                info += f" {mem_count}m"
-            label = f"{name} [dim]{info}[/dim]"
+                badges.append(f"{mem_count}m")
+            suffix = " ".join(badges)
+            if suffix:
+                suffix = " " + suffix
+            label = f"{name} [dim]{date}{suffix}[/dim]"
             lv.append(self._make_item(label, project))
 
     def refresh_projects(self, projects: list[Project]) -> None:

@@ -77,10 +77,20 @@ class LazyClaude(App):
         yield Footer()
 
     def on_mount(self) -> None:
-        # Load session data
+        # Load session data and compute per-project session counts
         history = self._claude_dir.load_history(limit=500)
         sessions = self._claude_dir.list_sessions()
         self.query_one("#panel-sessions", SessionPanel).load_data(history, sessions)
+
+        # Inject session counts into projects and re-render
+        session_counts: dict[str, int] = {}
+        for entry in history:
+            key = entry.project.rstrip("/")
+            session_counts[key] = session_counts.get(key, 0) + 1
+        proj_panel = self.query_one("#panel-projects", ProjectPanel)
+        for p in proj_panel._projects:
+            p._session_count = session_counts.get(p.display_name.rstrip("/"), 0)
+        proj_panel._render_items()
 
         # Focus first panel and expand it
         panel = self.query_one("#panel-projects", ProjectPanel)
