@@ -381,6 +381,7 @@ class SessionPanel(PanelWidget):
 
     BINDINGS = [
         Binding("enter", "select_cursor", "View", show=True),
+        Binding("d", "delete_session", "Delete", show=True),
         *PanelWidget.BINDINGS,
     ]
 
@@ -388,6 +389,23 @@ class SessionPanel(PanelWidget):
         super().__init__(**kwargs)
         self._all_history: list[HistoryEntry] = []
         self._transcripts: list[TranscriptSession] = []
+
+    def action_delete_session(self) -> None:
+        """Request deletion of the selected transcript."""
+        if self._active_subtab != 0 or not self._transcripts:
+            return
+        idx = self.listview.index
+        if idx is not None and idx < len(self._transcripts):
+            self._post_select(("action", "delete_session"))
+
+    @property
+    def selected_transcript(self) -> TranscriptSession | None:
+        if self._active_subtab != 0:
+            return None
+        idx = self.listview.index
+        if idx is not None and idx < len(self._transcripts):
+            return self._transcripts[idx]
+        return None
 
     def load_data(self, history: list[HistoryEntry], sessions: list) -> None:
         self._all_history = history

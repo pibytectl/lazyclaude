@@ -220,6 +220,11 @@ class LazyClaude(App):
             elif isinstance(data, MemoryFile):
                 self._start_memory_edit(data)
 
+        # ── Session actions ──
+        elif isinstance(panel, SessionPanel):
+            if isinstance(data, tuple) and data[0] == "action":
+                self._handle_session_action(data[1])
+
     # ── Config Helpers ────────────────────────────────────────────────────
 
     def _show_config_detail(self, key: str, detail: DetailPane) -> None:
@@ -298,6 +303,41 @@ class LazyClaude(App):
                 self.notify("Deleted", severity="information", timeout=2)
 
             self.push_screen(ConfirmModal(f"Delete '{mem.name}'?"), on_confirm)
+
+    # ── Session Helpers ────────────────────────────────────────────────────
+
+    def _handle_session_action(self, action: str) -> None:
+        if action == "delete_session":
+            session_panel = self.query_one("#panel-sessions", SessionPanel)
+            transcript = session_panel.selected_transcript
+            if transcript is None:
+                self.notify("No session selected", severity="warning", timeout=2)
+                return
+
+            size = f"{transcript.size_kb}KB" if transcript.size_kb < 1024 else f"{transcript.size_kb // 1024}MB"
+            date = transcript.modified.strftime("%Y-%m-%d %H:%M")
+
+            def on_confirm(confirmed: bool) -> None:
+                if not confirmed or self._selected_project is None:
+                    return
+                # Delete transcript file and its companion UUID directory
+                transcript.path.unlink(missing_ok=True)
+                companion_dir = transcript.path.parent / transcript.session_id
+                if companion_dir.is_dir():
+                    import shutil
+                    shutil.rmtree(companion_dir, ignore_errors=True)
+                # Refresh
+                transcripts = self._claude_dir.list_transcripts(self._selected_project)
+                session_panel.load_transcripts(transcripts)
+                self._selected_project.transcript_count = len(transcripts)
+                detail = self.query_one("#detail-pane", DetailPane)
+                detail.show_text("Sessions", f"[dim]Session deleted ({size})[/dim]")
+                self.notify(f"Deleted session ({size})", severity="information", timeout=2)
+
+            self.push_screen(
+                ConfirmModal(f"Delete session {transcript.session_id[:8]}…? ({size}, {date})"),
+                on_confirm,
+            )
 
     # ── Save ──────────────────────────────────────────────────────────────
 
