@@ -311,22 +311,15 @@ ConfirmModal {
     align: center middle;
 }
 
-#confirm-dialog {
-    background: #0a0a0a;
+#confirm-popup {
+    background: #111111;
     border: round #ff4444;
-    width: 50;
-    height: 10;
-    padding: 1 2;
-}
-
-#confirm-message {
     color: #d0d0d0;
-    margin-bottom: 1;
-}
-
-#confirm-buttons {
-    align: right middle;
-    margin-top: 1;
+    width: auto;
+    max-width: 60;
+    height: auto;
+    padding: 1 2;
+    text-align: center;
 }
 
 /* ── Help Overlay ─────────────────────────────────────────────── */

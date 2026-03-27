@@ -42,19 +42,15 @@ class ConfirmModal(ModalScreen[bool]):
         self._message = message
 
     def compose(self) -> ComposeResult:
-        with Static(id="confirm-dialog"):
-            yield Label(self._message, id="confirm-message")
-            with Static(id="confirm-buttons"):
-                yield Button("Cancel [Esc]", id="btn-cancel")
-                yield Button("Delete [y]", id="btn-confirm", variant="error")
-
-    def on_button_pressed(self, event: Button.Pressed) -> None:
-        self.dismiss(event.button.id == "btn-confirm")
+        yield Static(
+            f" {self._message}  [bold #ff4444]y[/bold #ff4444]/[dim]n[/dim] ",
+            id="confirm-popup",
+        )
 
     def on_key(self, event) -> None:
         if event.key == "y":
             self.dismiss(True)
-        elif event.key == "escape":
+        elif event.key in ("n", "escape"):
             self.dismiss(False)
 
 
