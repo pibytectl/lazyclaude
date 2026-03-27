@@ -1,35 +1,42 @@
 OLED_THEME = """
+/* ─────────────────────────────────────────────────────────────────
+   LazyClaude OLED Theme
+
+   Design: True black (#000000) background for pixel-off power savings.
+   High-contrast selections using reverse-video and solid color bars.
+   Accent: #00d4aa (teal-green) for active elements.
+   ───────────────────────────────────────────────────────────────── */
+
 /* ── Base ─────────────────────────────────────────────────────── */
 Screen {
     background: #000000;
-    color: #e0e0e0;
+    color: #d0d0d0;
 }
 
 /* ── Header / Footer ─────────────────────────────────────────── */
 Header {
-    background: #0a0a0a;
+    background: #000000;
     color: #00d4aa;
     height: 1;
 }
 
 Footer {
-    background: #0a0a0a;
-    color: #555555;
+    background: #111111;
     height: 1;
 }
 
 FooterKey {
-    background: #0a0a0a;
-    color: #555555;
+    background: #111111;
+    color: #666666;
 }
 
 FooterKey .footer-key--key {
-    background: #1a1a1a;
+    background: #222222;
     color: #00d4aa;
 }
 
 FooterKey .footer-key--description {
-    color: #888888;
+    color: #999999;
 }
 
 /* ── Main Layout ──────────────────────────────────────────────── */
@@ -44,8 +51,8 @@ FooterKey .footer-key--description {
 
 /* ── Panel Base (collapsed state) ─────────────────────────────── */
 PanelWidget {
-    border: round #333333;
-    border-title-color: #555555;
+    border: round #2a2a2a;
+    border-title-color: #666666;
     border-title-style: bold;
     height: 3;
     padding: 0;
@@ -68,39 +75,36 @@ PanelWidget ListView {
 PanelWidget ListItem {
     padding: 0 1;
     background: #000000;
-    color: #c0c0c0;
+    color: #aaaaaa;
     height: 1;
 }
 
 PanelWidget ListItem:hover {
-    background: #0d1a0d;
+    background: #111111;
 }
 
+/* ── SELECTION — focused panel: solid teal bar, high contrast ── */
 PanelWidget ListView:focus ListItem.--highlight {
-    background: #0d2818;
-    color: #00d4aa;
+    background: #00d4aa;
+    color: #000000;
+    text-style: bold;
 }
 
-/* Dim highlight when panel not focused */
+/* ── SELECTION — unfocused panel: dim but still visible ───────── */
 PanelWidget ListView ListItem.--highlight {
-    background: #0a0a0a;
-    color: #888888;
+    background: #1a1a1a;
+    color: #00d4aa;
 }
 
 /* ── Detail Pane ──────────────────────────────────────────────── */
 DetailPane {
-    border: round #333333;
-    border-title-color: #555555;
+    border: round #2a2a2a;
+    border-title-color: #666666;
     border-title-style: bold;
     width: 1fr;
     height: 1fr;
     background: #000000;
     padding: 0;
-}
-
-DetailPane.detail-active {
-    border: round #00d4aa;
-    border-title-color: #00d4aa;
 }
 
 DetailPane ContentSwitcher {
@@ -111,7 +115,7 @@ DetailPane ContentSwitcher {
 /* ── Markdown ─────────────────────────────────────────────────── */
 Markdown {
     background: #000000;
-    color: #e0e0e0;
+    color: #d0d0d0;
     margin: 0 1;
 }
 
@@ -122,11 +126,13 @@ MarkdownViewer {
 MarkdownH1 {
     color: #00d4aa;
     background: #000000;
+    text-style: bold;
 }
 
 MarkdownH2 {
     color: #4ecdc4;
     background: #000000;
+    text-style: bold;
 }
 
 MarkdownH3 {
@@ -135,7 +141,7 @@ MarkdownH3 {
 }
 
 MarkdownCode {
-    background: #0a0a0a;
+    background: #111111;
     color: #feca57;
 }
 
@@ -147,32 +153,63 @@ MarkdownBullet {
     color: #00d4aa;
 }
 
+MarkdownBulletList {
+    background: #000000;
+}
+
+MarkdownOrderedList {
+    background: #000000;
+}
+
 MarkdownTable {
     background: #000000;
+}
+
+MarkdownBlockQuote {
+    background: #0a0a0a;
+    border-left: outer #00d4aa;
+}
+
+MarkdownHorizontalRule {
+    color: #2a2a2a;
+}
+
+MarkdownFence {
+    background: #0a0a0a;
 }
 
 /* ── Tree widget ──────────────────────────────────────────────── */
 Tree {
     background: #000000;
-    color: #c0c0c0;
+    color: #aaaaaa;
     height: 1fr;
     padding: 0 1;
 }
 
+Tree:focus > .tree--cursor {
+    background: #00d4aa;
+    color: #000000;
+    text-style: bold;
+}
+
 Tree > .tree--cursor {
-    background: #0d2818;
+    background: #1a1a1a;
     color: #00d4aa;
 }
 
 Tree > .tree--highlight {
-    background: #0a0a0a;
+    background: #111111;
+}
+
+Tree > .tree--guides {
+    color: #2a2a2a;
 }
 
 /* ── TextArea editor ──────────────────────────────────────────── */
 TextArea {
     background: #050505;
-    color: #e0e0e0;
-    border: tall #1a1a1a;
+    color: #d0d0d0;
+    border: tall #2a2a2a;
     height: 1fr;
 }
 
@@ -189,14 +226,19 @@ TextArea:focus {
 
 #detail-text-content {
     background: #000000;
-    color: #c0c0c0;
+    color: #aaaaaa;
+}
+
+/* ── VerticalScroll ───────────────────────────────────────────── */
+VerticalScroll {
+    background: #000000;
 }
 
 /* ── Input ────────────────────────────────────────────────────── */
 Input {
-    background: #050505;
-    border: tall #1a1a1a;
-    color: #e0e0e0;
+    background: #0a0a0a;
+    border: tall #2a2a2a;
+    color: #d0d0d0;
 }
 
 Input:focus {
@@ -204,34 +246,36 @@ Input:focus {
 }
 
 Select {
-    background: #050505;
-    border: tall #1a1a1a;
-    color: #e0e0e0;
+    background: #0a0a0a;
+    border: tall #2a2a2a;
+    color: #d0d0d0;
 }
 
 /* ── Buttons ──────────────────────────────────────────────────── */
 Button {
     background: #1a1a1a;
-    color: #c0c0c0;
+    color: #aaaaaa;
     border: tall #333333;
     margin: 0 1;
 }
 
 Button:hover {
-    background: #0d2818;
-    color: #00d4aa;
+    background: #00d4aa;
+    color: #000000;
 }
 
 Button.-primary {
-    background: #0d2818;
-    color: #00d4aa;
+    background: #00d4aa;
+    color: #000000;
     border: tall #00d4aa;
+    text-style: bold;
 }
 
 Button.-error {
-    background: #2a0d0d;
-    color: #ff6b6b;
-    border: tall #ff6b6b;
+    background: #ff4444;
+    color: #000000;
+    border: tall #ff4444;
+    text-style: bold;
 }
 
 /* ── Modals ───────────────────────────────────────────────────── */
@@ -254,7 +298,7 @@ NewMemoryModal {
 }
 
 .field-label {
-    color: #555555;
+    color: #666666;
     margin-top: 1;
 }
 
@@ -269,14 +313,14 @@ ConfirmModal {
 
 #confirm-dialog {
     background: #0a0a0a;
-    border: round #ff6b6b;
+    border: round #ff4444;
     width: 50;
     height: 10;
     padding: 1 2;
 }
 
 #confirm-message {
-    color: #e0e0e0;
+    color: #d0d0d0;
     margin-bottom: 1;
 }
 
@@ -306,17 +350,17 @@ HelpOverlay {
 
 DataTable {
     background: #0a0a0a;
-    color: #c0c0c0;
+    color: #aaaaaa;
 }
 
 DataTable > .datatable--header {
-    background: #0d2818;
-    color: #00d4aa;
+    background: #00d4aa;
+    color: #000000;
     text-style: bold;
 }
 
 DataTable > .datatable--cursor {
-    background: #0d1a0d;
+    background: #1a1a1a;
     color: #00d4aa;
 }
 
@@ -325,7 +369,7 @@ DataTable > .datatable--cursor {
 .badge-project { color: #ff6b6b; }
 .badge-feedback { color: #feca57; }
 .badge-reference { color: #a29bfe; }
-.badge-unknown { color: #555555; }
-.label-muted { color: #555555; }
+.badge-unknown { color: #666666; }
+.label-muted { color: #666666; }
 .label-accent { color: #00d4aa; }
 """
