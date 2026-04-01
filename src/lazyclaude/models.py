@@ -27,6 +27,7 @@ class MemoryFile:
     memory_type: MemoryType
     content: str
     modified: datetime
+    scope: str = "local"  # "local" or "global"
 
     @property
     def filename(self) -> str:
@@ -85,6 +86,7 @@ class Skill:
     description: str
     auto_triggers: list[str]
     content: str = ""
+    scope: str = "global"  # "global" or "local"
 
     @property
     def is_active(self) -> bool:
@@ -99,11 +101,21 @@ class Agent:
     model: str
     color: str
     content: str = ""
+    scope: str = "global"  # "global" or "local"
 
     @property
     def short_description(self) -> str:
         first_line = self.description.split("\n")[0] if self.description else ""
         return first_line[:80]
+
+
+@dataclass
+class Command:
+    """A custom slash command (.md file) from commands/ directories."""
+    path: Path
+    name: str
+    scope: str  # "global" or "project"
+    content: str = ""
 
 
 @dataclass

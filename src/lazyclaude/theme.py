@@ -10,7 +10,11 @@ OLED_THEME = """
 /* ── Base ─────────────────────────────────────────────────────── */
 Screen {
     background: #000000;
-    color: #d0d0d0;
+    color: #999999;
+    scrollbar-color: #00d4aa;
+    scrollbar-background: #0a0a0a;
+    scrollbar-color-hover: #00ffcc;
+    scrollbar-color-active: #00ffcc;
 }
 
 /* ── Header / Footer ─────────────────────────────────────────── */
@@ -75,7 +79,7 @@ PanelWidget ListView {
 PanelWidget ListItem {
     padding: 0 1;
     background: #000000;
-    color: #aaaaaa;
+    color: #888888;
     height: 1;
 }
 
@@ -85,7 +89,7 @@ PanelWidget ListItem:hover {
 
 /* ── SELECTION — focused panel: solid teal bar, high contrast ── */
 PanelWidget ListView:focus ListItem.--highlight {
-    background: #00d4aa;
+    background: #00ff00;
     color: #000000;
     text-style: bold;
 }
@@ -115,7 +119,7 @@ DetailPane ContentSwitcher {
 /* ── Markdown ─────────────────────────────────────────────────── */
 Markdown {
     background: #000000;
-    color: #d0d0d0;
+    color: #999999;
     margin: 0 1;
 }
 
@@ -226,12 +230,32 @@ TextArea:focus {
 
 #detail-text-content {
     background: #000000;
-    color: #aaaaaa;
+    color: #999999;
 }
 
 /* ── VerticalScroll ───────────────────────────────────────────── */
 VerticalScroll {
     background: #000000;
+}
+
+VerticalScroll:focus {
+    scrollbar-color: #00d4aa;
+    scrollbar-color-hover: #00ffcc;
+    scrollbar-color-active: #00ffcc;
+}
+
+/* ── Scrollbar ───────────────────────────────────────────────── */
+Scrollbar {
+    background: #0a0a0a;
+    color: #333333;
+}
+
+DetailPane VerticalScroll:focus-within {
+    border: round #00d4aa;
+}
+
+DetailPane Tree:focus {
+    border: round #00d4aa;
 }
 
 /* ── Input ────────────────────────────────────────────────────── */

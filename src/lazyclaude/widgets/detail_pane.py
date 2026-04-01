@@ -48,6 +48,7 @@ class DetailPane(Widget):
 
     BINDINGS = [
         Binding("escape", "cancel_edit", "Cancel", show=False),
+        Binding("h", "back_to_panel", "Back", show=False),
     ]
 
     DEFAULT_CSS = """
@@ -64,8 +65,11 @@ class DetailPane(Widget):
 
     def compose(self) -> ComposeResult:
         with ContentSwitcher(initial="detail-markdown"):
-            yield Markdown(
-                "*Select an item to view details*",
+            yield VerticalScroll(
+                Markdown(
+                    "*Select an item to view details*",
+                    id="detail-markdown-content",
+                ),
                 id="detail-markdown",
             )
             yield Tree("settings", id="detail-tree")
@@ -80,7 +84,7 @@ class DetailPane(Widget):
         self.border_title = title
         try:
             self.query_one(ContentSwitcher).current = "detail-markdown"
-            self.query_one("#detail-markdown", Markdown).update(
+            self.query_one("#detail-markdown-content", Markdown).update(
                 content or "*No content*"
             )
         except Exception:
@@ -145,6 +149,32 @@ class DetailPane(Widget):
         if self._editing:
             self.end_edit()
             self.app.notify("Edit cancelled", timeout=2)
+
+    def focus_content(self) -> None:
+        """Focus the currently visible content widget so it can be scrolled."""
+        if self._editing:
+            return
+        try:
+            switcher = self.query_one(ContentSwitcher)
+            current = switcher.current
+            if current == "detail-markdown":
+                self.query_one("#detail-markdown", VerticalScroll).focus()
+            elif current == "detail-tree":
+                self.query_one("#detail-tree", Tree).focus()
+            elif current == "detail-text":
+                self.query_one("#detail-text", VerticalScroll).focus()
+        except Exception:
+            pass
+
+    def action_back_to_panel(self) -> None:
+        """Return focus to the active left panel."""
+        if self._editing:
+            return
+        active = getattr(self.app, "_active_panel", None)
+        if active is not None:
+            active.listview.focus()
+        else:
+            self.app.action_focus_previous()
 
     @property
     def is_editing(self) -> bool:

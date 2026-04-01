@@ -9,6 +9,7 @@ from lazyclaude.history import load_history, load_sessions
 from lazyclaude.models import (
     Agent,
     ClaudeSettings,
+    Command,
     HistoryEntry,
     MemoryFile,
     MemoryType,
@@ -22,25 +23,41 @@ IGNORED_MEMORY_FILES = {".consolidate-lock", ".highwatermark", "MEMORY.md"}
 
 
 def _decode_project_name(dir_name: str) -> str:
-    """Convert '-home-andy-MAMRS' → '/home/andy/MAMRS'.
+    """Convert '-home-andy-projects-claude-claude-local-dev' → '/home/andy/projects/claude/claude_local_dev'.
 
-    Tries to find which path actually exists by progressively keeping more
-    of the suffix as a single hyphenated segment. This handles directory names
-    like 'claude-whatsapp-channel' that contain hyphens.
+    Claude encodes paths by replacing both '/' and '_' with '-'.
+    We rebuild the path greedily by checking actual directory contents at each level.
     """
     name = dir_name.lstrip("-")
     segments = name.split("-")
+    return str(_resolve_segments(Path("/"), segments, 0))
 
-    # Try keeping the last N segments as a single name (most specific first)
-    for keep_last in range(len(segments) - 1, 0, -1):
-        prefix_segs = segments[: len(segments) - keep_last]
-        suffix = "-".join(segments[len(segments) - keep_last :])
-        candidate = "/" + "/".join(prefix_segs + [suffix])
-        if Path(candidate).exists():
-            return candidate
 
-    # Fallback: replace all dashes with slashes
-    return "/" + "/".join(segments)
+def _resolve_segments(parent: Path, segments: list[str], start: int) -> Path:
+    """Greedily resolve encoded segments against the real filesystem."""
+    if start >= len(segments):
+        return parent
+
+    if not parent.is_dir():
+        return parent / "/".join(segments[start:])
+
+    try:
+        children = {c.name for c in parent.iterdir() if c.is_dir()}
+    except PermissionError:
+        children = set()
+
+    # Try longest match first (greedy) — check both hyphen and underscore joins
+    for end in range(len(segments), start, -1):
+        chunk = segments[start:end]
+        for joiner in ("-", "_"):
+            candidate = joiner.join(chunk)
+            if candidate in children:
+                result = _resolve_segments(parent / candidate, segments, end)
+                if result.exists():
+                    return result
+
+    # Single segment, no match needed (e.g. 'home', 'andy')
+    return _resolve_segments(parent / segments[start], segments, start + 1)
 
 
 def _parse_frontmatter(text: str) -> tuple[dict, str]:
@@ -114,11 +131,9 @@ class ClaudeDir:
 
     # ── Memory ───────────────────────────────────────────────────────────────
 
-    def load_memory_files(self, project: Project) -> list[MemoryFile]:
-        mem_dir = project.memory_path
+    def _load_memory_from_dir(self, mem_dir: Path, scope: str = "local") -> list[MemoryFile]:
         if not mem_dir.exists():
             return []
-
         files: list[MemoryFile] = []
         for f in sorted(mem_dir.iterdir()):
             if f.name in IGNORED_MEMORY_FILES or not f.suffix == ".md":
@@ -133,11 +148,18 @@ class ClaudeDir:
                     memory_type=MemoryType.from_str(fm.get("type", "unknown")),
                     content=body,
                     modified=datetime.fromtimestamp(f.stat().st_mtime),
+                    scope=scope,
                 ))
             except Exception:
                 continue
-
         return files
+
+    def load_memory_files(self, project: Project) -> list[MemoryFile]:
+        return self._load_memory_from_dir(project.memory_path, scope="local")
+
+    def load_global_memory_files(self) -> list[MemoryFile]:
+        """Load memory from ~/.claude/memory/ (the main global memory directory)."""
+        return self._load_memory_from_dir(self.base / "memory", scope="global")
 
     def save_memory_file(self, mem: MemoryFile) -> None:
         self._backup(mem.path)
@@ -253,17 +275,46 @@ class ClaudeDir:
         transcripts.sort(key=lambda t: t.modified, reverse=True)
         return transcripts
 
+    # ── Commands ──────────────────────────────────────────────────────────
+
+    def list_commands(self, project: Project | None = None) -> list[Command]:
+        """Discover custom slash commands from global and project commands/ dirs."""
+        commands: list[Command] = []
+
+        # Global commands: ~/.claude/commands/
+        global_dir = self.base / "commands"
+        if global_dir.exists():
+            for f in sorted(global_dir.iterdir()):
+                if f.suffix == ".md" and f.is_file():
+                    commands.append(Command(
+                        path=f,
+                        name=f.stem,
+                        scope="global",
+                    ))
+
+        # Project-scoped commands: ~/.claude/projects/<encoded>/commands/
+        if project is not None:
+            proj_cmd_dir = project.path / "commands"
+            if proj_cmd_dir.exists():
+                for f in sorted(proj_cmd_dir.iterdir()):
+                    if f.suffix == ".md" and f.is_file():
+                        commands.append(Command(
+                            path=f,
+                            name=f.stem,
+                            scope="project",
+                        ))
+
+        return commands
+
     # ── Skills ────────────────────────────────────────────────────────────────
 
-    def list_skills(self) -> list[Skill]:
-        skills_dir = self.base / "skills"
+    def _load_skills_from(self, skills_dir: Path, scope: str = "global") -> list[Skill]:
         if not skills_dir.exists():
             return []
         skills: list[Skill] = []
         for entry in sorted(skills_dir.iterdir()):
             if not entry.is_dir():
                 continue
-            # Resolve symlinks, skip broken ones
             try:
                 resolved = entry.resolve()
                 skill_md = resolved / "SKILL.md"
@@ -279,18 +330,36 @@ class ClaudeDir:
                     name=fm.get("name", entry.name),
                     description=fm.get("description", ""),
                     auto_triggers=triggers,
-                    content="",  # lazy-loaded on demand
+                    content="",
+                    scope=scope,
                 ))
             except (OSError, Exception):
                 continue
         return skills
 
+    def list_skills(self, project: "Project | None" = None) -> list[Skill]:
+        skills = self._load_skills_from(self.base / "skills", scope="global")
+        if project is not None:
+            local_dir = Path(project.display_name) / ".claude" / "skills"
+            skills.extend(self._load_skills_from(local_dir, scope="local"))
+        return skills
+
     # ── Agents ────────────────────────────────────────────────────────────────
 
-    def list_agents(self) -> list[Agent]:
+    def list_agents(self, project: "Project | None" = None) -> list[Agent]:
+        agents: list[Agent] = []
+        # Global agents from ~/.claude/agents/
         agents_dir = self.base / "agents"
-        if not agents_dir.exists():
-            return []
+        if agents_dir.exists():
+            agents.extend(self._load_agents_from(agents_dir, scope="global"))
+        # Local agents from <project>/.claude/agents/
+        if project:
+            local_dir = Path(project.display_name) / ".claude" / "agents"
+            if local_dir.exists():
+                agents.extend(self._load_agents_from(local_dir, scope="local"))
+        return agents
+
+    def _load_agents_from(self, agents_dir: Path, scope: str = "global") -> list[Agent]:
         agents: list[Agent] = []
         for f in sorted(agents_dir.iterdir()):
             if not f.suffix == ".md":
@@ -308,6 +377,7 @@ class ClaudeDir:
                     model=fm.get("model", "sonnet"),
                     color=fm.get("color", "white"),
                     content="",  # lazy-loaded on demand
+                    scope=scope,
                 ))
             except (OSError, Exception):
                 continue

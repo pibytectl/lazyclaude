@@ -11,7 +11,7 @@ from textual.widgets import ListView, ListItem, Static
 from textual.app import ComposeResult
 
 from lazyclaude.claude_dir import IGNORED_MEMORY_FILES
-from lazyclaude.models import Agent, HistoryEntry, MemoryFile, MemoryType, Project, Skill, TranscriptSession
+from lazyclaude.models import Agent, Command, HistoryEntry, MemoryFile, MemoryType, Project, Skill, TranscriptSession
 
 
 # ── Utility ──────────────────────────────────────────────────────────────────
@@ -293,10 +293,10 @@ class ConfigPanel(PanelWidget):
 class MemoryPanel(PanelWidget):
     panel_index = 3
     panel_label = "Memory"
+    subtabs = ["All", "Local", "Global"]
 
     BINDINGS = [
         Binding("enter", "select_cursor", "Edit", show=True),
-        Binding("n", "new_memory", "New", show=True),
         Binding("d", "delete_memory", "Delete", show=True),
         *PanelWidget.BINDINGS,
     ]
@@ -312,7 +312,12 @@ class MemoryPanel(PanelWidget):
     def _render_items(self) -> None:
         lv = self.listview
         lv.clear()
-        if not self._memory_files:
+        files = self._memory_files
+        if self._active_subtab == 1:
+            files = [f for f in files if f.scope == "local"]
+        elif self._active_subtab == 2:
+            files = [f for f in files if f.scope == "global"]
+        if not files:
             lv.append(self._make_item("[dim]No memory files[/dim]", None))
             return
         type_labels = {
@@ -322,17 +327,15 @@ class MemoryPanel(PanelWidget):
             MemoryType.REFERENCE: "REF",
             MemoryType.UNKNOWN: "UNK",
         }
-        for mem in self._memory_files:
+        for mem in files:
             color = TYPE_COLORS.get(mem.memory_type, "white")
             tag = type_labels.get(mem.memory_type, "UNK")
             name = mem.name
             if len(name) > 18:
                 name = name[:17] + "…"
-            label = f"[{color}]{tag}[/{color}] {name}"
+            scope_indicator = "[dim]G[/dim] " if mem.scope == "global" else ""
+            label = f"[{color}]{tag}[/{color}] {scope_indicator}{name}"
             lv.append(self._make_item(label, mem))
-
-    def action_new_memory(self) -> None:
-        self._post_select(("action", "new_memory"))
 
     def action_delete_memory(self) -> None:
         self._post_select(("action", "delete_memory"))
@@ -351,10 +354,11 @@ class MemoryPanel(PanelWidget):
 class SkillPanel(PanelWidget):
     panel_index = 4
     panel_label = "Skills"
-    subtabs = ["All", "Active"]
+    subtabs = ["All", "Global", "Local"]
 
     BINDINGS = [
         Binding("enter", "select_cursor", "View", show=True),
+        Binding("e", "edit_skill", "Edit", show=True),
         *PanelWidget.BINDINGS,
     ]
 
@@ -362,30 +366,108 @@ class SkillPanel(PanelWidget):
         super().__init__(**kwargs)
         self._skills = skills
 
+    def _filtered_skills(self) -> list[Skill]:
+        if self._active_subtab == 1:
+            return [s for s in self._skills if s.scope == "global"]
+        elif self._active_subtab == 2:
+            return [s for s in self._skills if s.scope == "local"]
+        return self._skills
+
+    def action_edit_skill(self) -> None:
+        idx = self.listview.index
+        skills = self._filtered_skills()
+        if idx is not None and idx < len(skills):
+            self._post_select(("edit", skills[idx]))
+
     def _render_items(self) -> None:
         lv = self.listview
         lv.clear()
-        skills = self._skills
-        if self._active_subtab == 1:  # Active only
-            skills = [s for s in skills if s.is_active]
+        skills = self._filtered_skills()
         if not skills:
             lv.append(self._make_item("[dim]No skills[/dim]", None))
             return
         for skill in skills:
-            triggers = f" [dim]{len(skill.auto_triggers)} triggers[/dim]" if skill.auto_triggers else ""
-            lv.append(self._make_item(f"{skill.name}{triggers}", skill))
+            triggers = f" [dim]{len(skill.auto_triggers)}t[/dim]" if skill.auto_triggers else ""
+            scope_indicator = "[dim]L[/dim] " if skill.scope == "local" else ""
+            lv.append(self._make_item(f"{scope_indicator}{skill.name}{triggers}", skill))
+
+
+# ── CommandPanel ─────────────────────────────────────────────────────────────
+
+SCOPE_COLORS = {
+    "global": "cyan",
+    "project": "green",
+}
+
+
+class CommandPanel(PanelWidget):
+    panel_index = 5
+    panel_label = "Commands"
+    subtabs = ["All", "Global", "Project"]
+
+    BINDINGS = [
+        Binding("enter", "select_cursor", "View", show=True),
+        Binding("e", "edit_command", "Edit", show=True),
+        *PanelWidget.BINDINGS,
+    ]
+
+    def __init__(self, commands: list[Command] | None = None, **kwargs) -> None:
+        super().__init__(**kwargs)
+        self._commands: list[Command] = commands or []
+
+    def action_edit_command(self) -> None:
+        idx = self.listview.index
+        if idx is not None:
+            commands = self._commands
+            if self._active_subtab == 1:
+                commands = [c for c in commands if c.scope == "global"]
+            elif self._active_subtab == 2:
+                commands = [c for c in commands if c.scope == "project"]
+            if idx < len(commands):
+                self._post_select(("edit", commands[idx]))
+
+    def load_commands(self, commands: list[Command]) -> None:
+        self._commands = commands
+        self._render_items()
+
+    def _render_items(self) -> None:
+        lv = self.listview
+        lv.clear()
+        commands = self._commands
+        if self._active_subtab == 1:  # Global only
+            commands = [c for c in commands if c.scope == "global"]
+        elif self._active_subtab == 2:  # Project only
+            commands = [c for c in commands if c.scope == "project"]
+        if not commands:
+            lv.append(self._make_item("[dim]No commands[/dim]", None))
+            return
+        for cmd in commands:
+            color = SCOPE_COLORS.get(cmd.scope, "white")
+            tag = "GLB" if cmd.scope == "global" else "PRJ"
+            name = cmd.name
+            if len(name) > 22:
+                name = name[:21] + "…"
+            label = f"[{color}]{tag}[/{color}] /{name}"
+            lv.append(self._make_item(label, cmd))
 
 
 # ── AgentPanel ───────────────────────────────────────────────────────────────
 
 
+SCOPE_AGENT_COLORS = {
+    "global": "cyan",
+    "local": "green",
+}
+
+
 class AgentPanel(PanelWidget):
-    panel_index = 5
+    panel_index = 6
     panel_label = "Agents"
-    subtabs = ["All", "By Model"]
+    subtabs = ["All", "Global", "Local", "By Model"]
 
     BINDINGS = [
         Binding("enter", "select_cursor", "View", show=True),
+        Binding("e", "edit_agent", "Edit", show=True),
         *PanelWidget.BINDINGS,
     ]
 
@@ -393,29 +475,44 @@ class AgentPanel(PanelWidget):
         super().__init__(**kwargs)
         self._agents = agents
 
+    def action_edit_agent(self) -> None:
+        idx = self.listview.index
+        if idx is not None and idx < len(self._agents):
+            self._post_select(("edit", self._agents[idx]))
+
     def _render_items(self) -> None:
         lv = self.listview
         lv.clear()
-        if not self._agents:
+
+        agents = self._agents
+        tab = self._active_subtab
+        if tab == 1:  # Global
+            agents = [a for a in agents if a.scope == "global"]
+        elif tab == 2:  # Local
+            agents = [a for a in agents if a.scope == "local"]
+
+        if not agents:
             lv.append(self._make_item("[dim]No agents[/dim]", None))
             return
 
-        if self._active_subtab == 1:  # By Model
+        if tab == 3:  # By Model
             by_model: dict[str, list[Agent]] = {}
             for a in self._agents:
                 by_model.setdefault(a.model, []).append(a)
-            for model, agents in sorted(by_model.items()):
+            for model, group in sorted(by_model.items()):
                 mc = MODEL_COLORS.get(model, "#c0c0c0")
                 lv.append(self._make_item(f"[{mc}]── {model} ──[/{mc}]", None))
-                for a in agents:
+                for a in group:
                     ac = AGENT_COLORS.get(a.color, "#c0c0c0")
                     lv.append(self._make_item(f"  [{ac}]{a.name}[/{ac}]", a))
-        else:  # All
-            for a in self._agents:
+        else:  # All, Global, Local
+            for a in agents:
                 ac = AGENT_COLORS.get(a.color, "#c0c0c0")
+                sc = SCOPE_AGENT_COLORS.get(a.scope, "#c0c0c0")
+                tag = "GLB" if a.scope == "global" else "LCL"
                 mc = MODEL_COLORS.get(a.model, "#c0c0c0")
                 lv.append(self._make_item(
-                    f"[{ac}]{a.name}[/{ac}] [{mc}]{a.model}[/{mc}]", a
+                    f"[{sc}]{tag}[/{sc}] [{ac}]{a.name}[/{ac}] [{mc}]{a.model}[/{mc}]", a
                 ))
 
 
@@ -423,7 +520,7 @@ class AgentPanel(PanelWidget):
 
 
 class SessionPanel(PanelWidget):
-    panel_index = 6
+    panel_index = 7
     panel_label = "Sessions"
     subtabs = ["Sessions", "History"]
 

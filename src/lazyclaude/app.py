@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from pathlib import Path
+
 from textual.app import App, ComposeResult
 from textual.binding import Binding
 from textual.containers import Horizontal, Vertical
@@ -9,13 +11,14 @@ from textual.timer import Timer
 from textual.widgets import Footer, Header
 
 from lazyclaude.claude_dir import ClaudeDir
-from lazyclaude.models import Agent, MemoryFile, MemoryType, Project, Skill
+from lazyclaude.models import Agent, Command, MemoryFile, MemoryType, Project, Skill
 from lazyclaude.theme import OLED_THEME
 from lazyclaude.widgets.detail_pane import DetailPane
 from lazyclaude.widgets.help_overlay import HelpOverlay
 from lazyclaude.widgets.memory_browser import ConfirmModal, NewMemoryModal
 from lazyclaude.widgets.panel_widget import (
     AgentPanel,
+    CommandPanel,
     ConfigPanel,
     MemoryPanel,
     PanelWidget,
@@ -36,14 +39,16 @@ class LazyClaude(App):
     BINDINGS = [
         Binding("q", "quit", "Quit"),
         Binding("question_mark", "help", "Help", key_display="?"),
-        Binding("ctrl+r", "reload", "Reload"),
+        Binding("r", "reload", "Reload"),
         Binding("ctrl+s", "save", "Save", show=False),
         Binding("1", "focus_panel_1", "Projects", show=False),
         Binding("2", "focus_panel_2", "Config", show=False),
         Binding("3", "focus_panel_3", "Memory", show=False),
         Binding("4", "focus_panel_4", "Skills", show=False),
-        Binding("5", "focus_panel_5", "Agents", show=False),
-        Binding("6", "focus_panel_6", "Sessions", show=False),
+        Binding("5", "focus_panel_5", "Commands", show=False),
+        Binding("6", "focus_panel_6", "Agents", show=False),
+        Binding("7", "focus_panel_7", "Sessions", show=False),
+        Binding("l", "focus_detail", "Detail", show=False),
         Binding("tab", "focus_next", "Next", show=False),
         Binding("shift+tab", "focus_previous", "Prev", show=False),
     ]
@@ -56,12 +61,14 @@ class LazyClaude(App):
         self._detail_timer: Timer | None = None
         self._pending_highlight: tuple[PanelWidget, object] | None = None
         self._claude_md_cache: dict[str, str] = {}  # project path → content
+        self._editing_file: tuple = (None, None)
 
     def compose(self) -> ComposeResult:
         yield Header(show_clock=True)
 
         projects = self._claude_dir.list_projects()
         skills = self._claude_dir.list_skills()
+        commands = self._claude_dir.list_commands()
         agents = self._claude_dir.list_agents()
 
         with Horizontal(id="main-layout"):
@@ -70,6 +77,7 @@ class LazyClaude(App):
                 yield ConfigPanel(id="panel-config")
                 yield MemoryPanel(id="panel-memory")
                 yield SkillPanel(skills, id="panel-skills")
+                yield CommandPanel(commands, id="panel-commands")
                 yield AgentPanel(agents, id="panel-agents")
                 yield SessionPanel(id="panel-sessions")
             yield DetailPane(id="detail-pane")
@@ -83,14 +91,66 @@ class LazyClaude(App):
         self.query_one("#panel-sessions", SessionPanel).load_data(history, sessions)
 
         # Focus first panel and expand it
-        panel = self.query_one("#panel-projects", ProjectPanel)
-        self._set_active_panel(panel)
-        panel.listview.focus()
+        proj_panel = self.query_one("#panel-projects", ProjectPanel)
+        self._set_active_panel(proj_panel)
+        proj_panel.listview.focus()
 
-        # Show initial detail
+        # Auto-select project matching CWD
+        cwd = Path.cwd().resolve()
+        matched = self._auto_select_project(proj_panel, cwd)
+
+        if not matched:
+            detail = self.query_one("#detail-pane", DetailPane)
+            detail.border_title = "Detail"
+            detail.show_markdown("Welcome", "# LazyClaude v0.2.0\n\nSelect a project to get started.\n\n**Keys:** `1-7` switch panels, `?` help, `q` quit")
+
+    def _auto_select_project(self, proj_panel: ProjectPanel, cwd: Path) -> bool:
+        """Try to select the most specific project matching cwd."""
+        cwd_str = str(cwd)
+        best_idx: int | None = None
+        best_len = 0
+        for i, project in enumerate(proj_panel._projects):
+            pname = project.display_name
+            if cwd_str == pname or cwd_str.startswith(pname + "/"):
+                if len(pname) > best_len:
+                    best_idx = i
+                    best_len = len(pname)
+        if best_idx is not None:
+            proj_panel.listview.index = best_idx
+            self._select_project(proj_panel._projects[best_idx])
+            self.notify(f"Auto-selected {proj_panel._projects[best_idx].short_name}", timeout=2)
+            return True
+        return False
+
+    # ── Project Selection ─────────────────────────────────────────────────
+
+    def _select_project(self, project: Project) -> None:
+        """Select a project and load all its data into panels."""
+        self._selected_project = project
+        local_mem = self._claude_dir.load_memory_files(project)
+        global_mem = self._claude_dir.load_global_memory_files()
+        project.memory_files = local_mem + global_mem
+        self.query_one("#panel-memory", MemoryPanel).load_files(project.memory_files)
+        self.query_one("#panel-config", ConfigPanel).load_project(project)
+        commands = self._claude_dir.list_commands(project)
+        self.query_one("#panel-commands", CommandPanel).load_commands(commands)
+        transcripts = self._claude_dir.list_transcripts(project)
+        self.query_one("#panel-sessions", SessionPanel).load_transcripts(transcripts)
+        skills = self._claude_dir.list_skills(project)
+        skill_panel = self.query_one("#panel-skills", SkillPanel)
+        skill_panel._skills = skills
+        skill_panel._render_items()
+        agents = self._claude_dir.list_agents(project)
+        agent_panel = self.query_one("#panel-agents", AgentPanel)
+        agent_panel._agents = agents
+        agent_panel._render_items()
+        self.sub_title = project.display_name
         detail = self.query_one("#detail-pane", DetailPane)
-        detail.border_title = "Detail"
-        detail.show_markdown("Welcome", "# LazyClaude v0.2.0\n\nSelect a project to get started.\n\n**Keys:** `1-6` switch panels, `?` help, `q` quit")
+        claude_md = self._get_claude_md(project)
+        detail.show_markdown(
+            f"CLAUDE.md — {project.short_name}",
+            claude_md or f"*No CLAUDE.md for {project.display_name}*",
+        )
 
     # ── Panel Focus Management ────────────────────────────────────────────
 
@@ -163,13 +223,24 @@ class LazyClaude(App):
                 f"**Triggers:** {triggers}\n\n**Description:** {data.description}\n\n---\n\n{data.content}",
             )
 
-        elif isinstance(panel, AgentPanel) and isinstance(data, Agent):
+        elif isinstance(panel, CommandPanel) and isinstance(data, Command):
             # Lazy-load content if not yet loaded
             if not data.content:
-                data.content = data.path.read_text(encoding="utf-8").split("---", 2)[-1].lstrip("\n") if data.path.exists() else ""
+                data.content = data.path.read_text(encoding="utf-8") if data.path.exists() else ""
+            scope_label = "Global" if data.scope == "global" else "Project"
             detail.show_markdown(
+                f"Command — /{data.name}",
+                f"**Scope:** {scope_label} | **File:** `{data.path.name}`\n\n---\n\n{data.content}",
+            )
+
+        elif isinstance(panel, AgentPanel) and isinstance(data, Agent):
+            detail.show_text(
                 f"Agent — {data.name}",
-                f"**Model:** `{data.model}` | **Color:** {data.color}\n\n---\n\n{data.content}",
+                f"[cyan]Model:[/cyan]  {data.model}\n"
+                f"[cyan]Color:[/cyan]  {data.color}\n"
+                f"[cyan]Scope:[/cyan]  {data.scope}\n"
+                f"[cyan]Path:[/cyan]   {data.path}\n"
+                f"\n[dim]Press Enter to load full prompt[/dim]",
             )
 
         elif isinstance(panel, SessionPanel):
@@ -206,20 +277,7 @@ class LazyClaude(App):
             if isinstance(data, tuple) and data[0] == "action":
                 self._handle_project_action(data[1])
             elif isinstance(data, Project):
-                self._selected_project = data
-                data.memory_files = self._claude_dir.load_memory_files(data)
-                self.query_one("#panel-memory", MemoryPanel).load_files(data.memory_files)
-                self.query_one("#panel-config", ConfigPanel).load_project(data)
-                transcripts = self._claude_dir.list_transcripts(data)
-                self.query_one("#panel-sessions", SessionPanel).load_transcripts(transcripts)
-                self.sub_title = data.display_name
-                # Show CLAUDE.md on Enter
-                detail = self.query_one("#detail-pane", DetailPane)
-                claude_md = self._get_claude_md(data)
-                detail.show_markdown(
-                    f"CLAUDE.md — {data.short_name}",
-                    claude_md or f"*No CLAUDE.md for {data.display_name}*",
-                )
+                self._select_project(data)
                 self.notify(f"Loaded {data.short_name}", timeout=2)
 
         # ── Config actions ──
@@ -235,6 +293,28 @@ class LazyClaude(App):
                 self._handle_memory_action(data[1])
             elif isinstance(data, MemoryFile):
                 self._start_memory_edit(data)
+
+        # ── Skill edit ──
+        elif isinstance(panel, SkillPanel):
+            if isinstance(data, tuple) and data[0] == "edit":
+                self._start_file_edit(data[1])
+
+        # ── Command edit ──
+        elif isinstance(panel, CommandPanel):
+            if isinstance(data, tuple) and data[0] == "edit":
+                self._start_file_edit(data[1])
+
+        # ── Agent select / edit ──
+        elif isinstance(panel, AgentPanel):
+            if isinstance(data, tuple) and data[0] == "edit":
+                self._start_file_edit(data[1])
+            elif isinstance(data, Agent):
+                if not data.content:
+                    data.content = data.path.read_text(encoding="utf-8").split("---", 2)[-1].lstrip("\n") if data.path.exists() else ""
+                detail.show_markdown(
+                    f"Agent — {data.name}",
+                    f"**Model:** `{data.model}` | **Color:** {data.color}\n\n---\n\n{data.content}",
+                )
 
         # ── Session actions ──
         elif isinstance(panel, SessionPanel):
@@ -317,12 +397,25 @@ class LazyClaude(App):
                 detail.show_text("settings.local.json", "[dim]File not found[/dim]")
 
     def _handle_config_edit(self, key: str) -> None:
-        if key != "claude_md":
-            self.notify("Only CLAUDE.md is editable", severity="warning", timeout=2)
-            return
         detail = self.query_one("#detail-pane", DetailPane)
-        content = self._claude_dir.load_claude_md(self._selected_project)
-        detail.start_edit(content, title="CLAUDE.md")
+        if key == "claude_md":
+            content = self._claude_dir.load_claude_md(self._selected_project)
+            self._editing_file = ("claude_md", None)
+            detail.start_edit(content, title="CLAUDE.md")
+        elif key == "claude_md_global":
+            content = self._claude_dir.load_claude_md(None)
+            self._editing_file = ("claude_md_global", None)
+            detail.start_edit(content, title="CLAUDE.md — Global")
+        else:
+            self.notify("Not editable", severity="warning", timeout=2)
+
+    def _start_file_edit(self, item: Skill | Command | Agent) -> None:
+        """Start editing any .md file (skill, command, agent)."""
+        detail = self.query_one("#detail-pane", DetailPane)
+        content = item.path.read_text(encoding="utf-8") if item.path.exists() else ""
+        label = item.name
+        self._editing_file = ("file", item)
+        detail.start_edit(content, title=label)
 
     # ── Memory Helpers ────────────────────────────────────────────────────
 
@@ -420,7 +513,7 @@ class LazyClaude(App):
         if text is None:
             return
 
-        # Determine what we're editing
+        # Memory file edit
         editing_mem = getattr(self, "_editing_memory", None)
         if editing_mem is not None and isinstance(editing_mem, MemoryFile):
             editing_mem.content = text
@@ -432,12 +525,27 @@ class LazyClaude(App):
             )
             self._editing_memory = None
             self.notify("Memory saved", severity="information", timeout=2)
-        else:
-            # Assume CLAUDE.md edit
+            return
+
+        # Generic file edits (config, skill, command, agent)
+        kind, item = getattr(self, "_editing_file", (None, None))
+        if kind == "claude_md":
             self._claude_dir.save_claude_md(text, self._selected_project)
             detail.end_edit()
             detail.show_markdown("CLAUDE.md", text)
             self.notify("CLAUDE.md saved", severity="information", timeout=2)
+        elif kind == "claude_md_global":
+            self._claude_dir.save_claude_md(text, None)
+            detail.end_edit()
+            detail.show_markdown("CLAUDE.md — Global", text)
+            self.notify("Global CLAUDE.md saved", severity="information", timeout=2)
+        elif kind == "file" and item is not None:
+            item.path.write_text(text, encoding="utf-8")
+            item.content = text
+            detail.end_edit()
+            detail.show_markdown(item.name, text)
+            self.notify(f"{item.name} saved", severity="information", timeout=2)
+        self._editing_file = (None, None)
 
     # ── Global Actions ────────────────────────────────────────────────────
 
@@ -449,11 +557,14 @@ class LazyClaude(App):
         projects = self._claude_dir.list_projects()
         self.query_one("#panel-projects", ProjectPanel).refresh_projects(projects)
 
-        skills = self._claude_dir.list_skills()
+        skills = self._claude_dir.list_skills(self._selected_project)
         self.query_one("#panel-skills", SkillPanel)._skills = skills
         self.query_one("#panel-skills", SkillPanel)._render_items()
 
-        agents = self._claude_dir.list_agents()
+        commands = self._claude_dir.list_commands(self._selected_project)
+        self.query_one("#panel-commands", CommandPanel).load_commands(commands)
+
+        agents = self._claude_dir.list_agents(self._selected_project)
         self.query_one("#panel-agents", AgentPanel)._agents = agents
         self.query_one("#panel-agents", AgentPanel)._render_items()
 
@@ -476,10 +587,18 @@ class LazyClaude(App):
         self._focus_panel("#panel-skills")
 
     def action_focus_panel_5(self) -> None:
-        self._focus_panel("#panel-agents")
+        self._focus_panel("#panel-commands")
 
     def action_focus_panel_6(self) -> None:
+        self._focus_panel("#panel-agents")
+
+    def action_focus_panel_7(self) -> None:
         self._focus_panel("#panel-sessions")
+
+    def action_focus_detail(self) -> None:
+        detail = self.query_one("#detail-pane", DetailPane)
+        if not detail.is_editing:
+            detail.focus_content()
 
     def _focus_panel(self, selector: str) -> None:
         try:
